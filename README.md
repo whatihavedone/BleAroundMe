@@ -1,6 +1,11 @@
-# Smart Glasses Detector
+# Smart Devices Detector
 
 An Android app built with Jetpack Compose and Kotlin that scans for BLE devices matching specific MAC address prefixes and displays notifications when target devices are detected.
+
+| Main screen | Scanning | Permission request |
+| ------ | ------ | ------ |
+|  ![image](https://github.com/user-attachments/assets/b4bf92f3-0ba9-42c2-aca3-7ab14d57f88d)      |    ![image](https://github.com/user-attachments/assets/1cc82c5c-ec0a-4812-84ce-f5de5104e02a)| ![image](https://github.com/user-attachments/assets/59d6ba76-854e-4d14-9860-a22e474d0356)  |
+
 
 ## Features
 
