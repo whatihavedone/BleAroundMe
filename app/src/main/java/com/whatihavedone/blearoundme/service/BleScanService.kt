@@ -153,6 +153,9 @@ class BleScanService : LifecycleService() {
     }
 
     private fun updateForegroundNotification(devicesFound: Int) {
+        // If we are no longer scanning, don't update/re-post the notification
+        if (!bleScanner.isScanning.value) return
+
         val intent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
             this,
@@ -208,7 +211,7 @@ class BleScanService : LifecycleService() {
 
         lifecycleScope.launch {
             bleScanner.foundMatchingDevices.collect { matchingDevices ->
-                if (matchingDevices.isNotEmpty()) {
+                if (matchingDevices.isNotEmpty() && bleScanner.isScanning.value) {
                     val latestDevice = matchingDevices.maxByOrNull { it.timestamp }
                     latestDevice?.let { device ->
                         Log.i("BleScanService", "Showing notification for device: ${device.deviceName} (${device.macAddress})")
@@ -240,6 +243,8 @@ class BleScanService : LifecycleService() {
     private fun stopScanning() {
         Log.i("BleScanService", "Stopping BLE scan")
         bleScanner.stopScan()
+        // Explicitly cancel notifications when stopping
+        notificationHelper.cancelNotification()
     }
 
     override fun onDestroy() {
