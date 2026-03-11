@@ -2,6 +2,7 @@ package com.whatihavedone.blearoundme.ui.screen
 
 import android.content.Context
 import android.content.Intent
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,15 +19,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -70,6 +73,7 @@ fun MainScreen(
     val foundMatchingDevices by viewModel.foundMatchingDevices.collectAsState()
 
     var showAddPrefixDialog by remember { mutableStateOf(false) }
+    var isCriteriaExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(permissionState.allPermissionsGranted, bluetoothState.isEnabled) {
         if (permissionState.allPermissionsGranted && bluetoothState.isEnabled) {
@@ -136,36 +140,84 @@ fun MainScreen(
 
                 // --- DETECTION CRITERIA ---
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Detection Criteria", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                        IconButton(onClick = { showAddPrefixDialog = true }) {
-                            Icon(Icons.Default.Add, contentDescription = "Add Criteria")
+                    Column {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { if (macPrefixes.size > 2) isCriteriaExpanded = !isCriteriaExpanded },
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "Detection Criteria",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                if (macPrefixes.size > 2) {
+                                    Icon(
+                                        imageVector = if (isCriteriaExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                        contentDescription = if (isCriteriaExpanded) "Show less" else "Show more",
+                                        modifier = Modifier.padding(start = 4.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                            IconButton(onClick = { showAddPrefixDialog = true }) {
+                                Icon(Icons.Default.Add, contentDescription = "Add Criteria", tint = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                        
+                        if (macPrefixes.isEmpty()) {
+                            Text(
+                                "No detection criteria configured.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
                         }
                     }
                 }
 
-                if (macPrefixes.isEmpty()) {
-                    item {
-                        Text("No detection criteria configured.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (macPrefixes.isNotEmpty()) {
+                    val displayedCriteria = if (isCriteriaExpanded) {
+                        macPrefixes.toList()
+                    } else {
+                        macPrefixes.toList().take(2)
                     }
-                } else {
-                    items(macPrefixes.toList()) { criteria ->
+
+                    items(displayedCriteria) { criteria ->
                         MacPrefixItem(criteria, onRemove = { viewModel.removeMacPrefix(criteria) })
+                    }
+
+                    if (!isCriteriaExpanded && macPrefixes.size > 2) {
+                        item {
+                            TextButton(
+                                onClick = { isCriteriaExpanded = true },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Show all (${macPrefixes.size})")
+                            }
+                        }
                     }
                 }
 
+                item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant) }
+
                 // --- DETECTED WEARABLES ---
                 item {
-                    Text("Detected Wearables", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        "Detected Wearables (Ordered by Proximity)", 
+                        style = MaterialTheme.typography.headlineSmall, 
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
 
                 if (foundMatchingDevices.isEmpty()) {
                     item {
-                        Text(if (isScanning) "Scanning..." else "Start scanning to detect devices", style = MaterialTheme.typography.bodyMedium)
+                        Text(if (isScanning) "Scanning..." else "Start scanning to detect devices", style = MaterialTheme.typography.bodyLarge)
                     }
                 } else {
                     items(foundMatchingDevices, key = { it.macAddress }) { device ->
@@ -173,9 +225,16 @@ fun MainScreen(
                     }
                 }
 
+                item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant) }
+
                 // --- ALL SCAN RESULTS ---
                 item {
-                    Text("All BLE Devices", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text(
+                        "All BLE Devices", 
+                        style = MaterialTheme.typography.headlineSmall, 
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
 
                 if (scanResults.isEmpty()) {
@@ -223,11 +282,24 @@ fun MacPrefixItem(macPrefix: MacPrefix, onRemove: () -> Unit) {
 fun MatchingDeviceItem(device: com.whatihavedone.blearoundme.ble.BleScanResult, macPrefixes: Set<MacPrefix>) {
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("${device.rssi}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.width(50.dp))
-            Column {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(64.dp)) {
+                Text("${device.rssi}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("dBm", style = MaterialTheme.typography.labelSmall)
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(device.matchingTag ?: "Detected Device", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(device.deviceName ?: "Unknown Name", style = MaterialTheme.typography.bodyMedium)
                 Text(device.macAddress, style = MaterialTheme.typography.bodySmall, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = "~${"%.1f".format(device.estimatedDistance)}m",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text("estimated", style = MaterialTheme.typography.labelSmall)
             }
         }
     }
@@ -238,10 +310,15 @@ fun DeviceItem(device: com.whatihavedone.blearoundme.ble.BleScanResult) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("${device.rssi}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.width(40.dp))
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(device.deviceName ?: "Unknown Device", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                 Text(device.macAddress, style = MaterialTheme.typography.bodySmall, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
             }
+            Text(
+                text = "${"%.1f".format(device.estimatedDistance)}m",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.outline
+            )
         }
     }
 }

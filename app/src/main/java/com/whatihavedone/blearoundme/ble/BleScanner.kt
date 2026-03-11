@@ -9,19 +9,20 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Log
-import android.util.SparseArray
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import com.whatihavedone.blearoundme.data.MacPrefix
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlin.math.pow
 
 data class BleScanResult(
     val deviceName: String?,
     val macAddress: String,
     val rssi: Int,
     val timestamp: Long = System.currentTimeMillis(),
-    val matchingTag: String? = null
+    val matchingTag: String? = null,
+    val estimatedDistance: Double = 0.0
 )
 
 class BleScanner(private val context: Context) {
@@ -57,6 +58,7 @@ class BleScanner(private val context: Context) {
                 val macAddress = device.address
                 val deviceName = device.name
                 val rssi = scanResult.rssi
+                val distance = calculateDistance(rssi)
 
                 // Find matching criteria and its tag
                 val matchingCriteria = findMatchingCriteria(scanResult)
@@ -65,30 +67,17 @@ class BleScanner(private val context: Context) {
                     deviceName = deviceName,
                     macAddress = macAddress,
                     rssi = rssi,
-                    matchingTag = matchingCriteria?.tag
+                    matchingTag = matchingCriteria?.tag,
+                    estimatedDistance = distance
                 )
 
-                // Update scan results
-                val currentResults = _scanResults.value.toMutableList()
-                val existingIndex = currentResults.indexOfFirst { it.macAddress == macAddress }
-                if (existingIndex != -1) {
-                    currentResults[existingIndex] = bleResult
-                } else {
-                    currentResults.add(bleResult)
-                }
-                _scanResults.value = currentResults
+                // Update ALL scan results and sort by distance
+                _scanResults.value = updateAndSortList(_scanResults.value, bleResult)
 
-                // If a match was found, update matching devices
+                // If a match was found, update matching devices and sort by distance
                 if (matchingCriteria != null) {
-                    Log.i("BleScanner", "Found matching device: $deviceName ($macAddress) Tag: ${matchingCriteria.tag}")
-                    val currentMatchingDevices = _foundMatchingDevices.value.toMutableList()
-                    val existingMatchIndex = currentMatchingDevices.indexOfFirst { it.macAddress == macAddress }
-                    if (existingMatchIndex != -1) {
-                        currentMatchingDevices[existingMatchIndex] = bleResult
-                    } else {
-                        currentMatchingDevices.add(bleResult)
-                    }
-                    _foundMatchingDevices.value = currentMatchingDevices
+                    Log.i("BleScanner", "Found matching device: $deviceName ($macAddress) Distance: %.2fm".format(distance))
+                    _foundMatchingDevices.value = updateAndSortList(_foundMatchingDevices.value, bleResult)
                 }
             }
         }
@@ -97,6 +86,30 @@ class BleScanner(private val context: Context) {
             Log.e("BleScanner", "BLE scan failed with error code: $errorCode")
             _isScanning.value = false
         }
+    }
+
+    private fun updateAndSortList(currentList: List<BleScanResult>, newResult: BleScanResult): List<BleScanResult> {
+        val mutable = currentList.toMutableList()
+        val index = mutable.indexOfFirst { it.macAddress == newResult.macAddress }
+        if (index != -1) {
+            mutable[index] = newResult
+        } else {
+            mutable.add(newResult)
+        }
+        // Sort by distance (closest first)
+        return mutable.sortedBy { it.estimatedDistance }
+    }
+
+    /**
+     * Estimates distance in meters using the Log-Distance Path Loss model.
+     * Formula: d = 10 ^ ((Measured Power - RSSI) / (10 * N))
+     * - Measured Power: Expected RSSI at 1 meter (typically -59 to -65)
+     * - N: Environmental factor (2.0 for free space, 3.0-4.0 for indoors)
+     */
+    private fun calculateDistance(rssi: Int): Double {
+        val txPower = -59.0 // Hardcoded reference RSSI at 1m
+        val n = 2.5 // Indoor environmental factor
+        return 10.0.pow((txPower - rssi) / (10.0 * n))
     }
 
     fun setFilterCriteria(criteria: Set<MacPrefix>) {

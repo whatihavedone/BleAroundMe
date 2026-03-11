@@ -11,9 +11,7 @@ import androidx.core.app.NotificationManagerCompat
 import com.whatihavedone.blearoundme.MainActivity
 import com.whatihavedone.blearoundme.R
 import com.whatihavedone.blearoundme.ble.BleScanResult
-import com.whatihavedone.blearoundme.data.MacPrefixRepository
 import com.whatihavedone.blearoundme.service.BleScanService.Companion.FOREGROUND_NOTIFICATION_ID
-import kotlinx.coroutines.flow.first
 
 class NotificationHelper(private val context: Context) {
 
