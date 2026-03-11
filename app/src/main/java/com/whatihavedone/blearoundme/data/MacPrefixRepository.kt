@@ -19,7 +19,7 @@ class MacPrefixRepository(private val context: Context) {
 
     private object PreferencesKeys {
         val MAC_PREFIXES = stringPreferencesKey("mac_prefixes_json")
-        val DEFAULTS_INITIALIZED = booleanPreferencesKey("defaults_initialized")
+        val DEFAULTS_INITIALIZED = booleanPreferencesKey("defaults_initialized_v2") // Updated version
     }
 
     val macPrefixes: Flow<Set<MacPrefix>> = context.dataStore.data
@@ -42,29 +42,42 @@ class MacPrefixRepository(private val context: Context) {
         val defaultsInitialized = preferences[PreferencesKeys.DEFAULTS_INITIALIZED] ?: false
 
         if (!defaultsInitialized) {
-            android.util.Log.d("MacPrefixRepository", "Initializing default MAC prefixes")
+            android.util.Log.d("MacPrefixRepository", "Updating default detection criteria")
             val defaultPrefixes = MacPrefix.getDefaultMacPrefixes()
-            val jsonString = Json.encodeToString(defaultPrefixes)
-
+            
             context.dataStore.edit { prefs ->
-                prefs[PreferencesKeys.MAC_PREFIXES] = jsonString
+                val jsonString = prefs[stringPreferencesKey("mac_prefixes_json")]
+                val currentPrefixes = if (jsonString != null) {
+                    try {
+                        Json.decodeFromString<Set<MacPrefix>>(jsonString).toMutableSet()
+                    } catch (e: Exception) {
+                        mutableSetOf()
+                    }
+                } else {
+                    mutableSetOf()
+                }
+
+                // Add all defaults that aren't already there (by address)
+                val existingAddresses = currentPrefixes.map { it.address }.toSet()
+                val newDefaults = defaultPrefixes.filter { it.address !in existingAddresses }
+                
+                if (newDefaults.isNotEmpty()) {
+                    currentPrefixes.addAll(newDefaults)
+                    prefs[stringPreferencesKey("mac_prefixes_json")] = Json.encodeToString(currentPrefixes)
+                }
+                
                 prefs[PreferencesKeys.DEFAULTS_INITIALIZED] = true
             }
-
-            android.util.Log.d(
-                "MacPrefixRepository",
-                "Default MAC prefixes initialized: ${defaultPrefixes.size} prefixes"
-            )
         }
     }
 
-    suspend fun addMacPrefix(prefix: String, tag: String = "Custom Device") {
-        val normalizedPrefix = normalizeMacPrefix(prefix)
-        if (isValidMacPrefix(normalizedPrefix)) {
-            val newPrefix = MacPrefix(normalizedPrefix, tag)
+    suspend fun addMacPrefix(prefix: String, tag: String = "Custom Device", isManufacturerId: Boolean = false) {
+        val normalizedPrefix = normalizePrefix(prefix, isManufacturerId)
+        if (isValidPrefix(normalizedPrefix, isManufacturerId)) {
+            val newPrefix = MacPrefix(normalizedPrefix, tag, isManufacturerId)
 
             context.dataStore.edit { preferences ->
-                val jsonString = preferences[PreferencesKeys.MAC_PREFIXES]
+                val jsonString = preferences[stringPreferencesKey("mac_prefixes_json")]
                 val currentPrefixes = if (jsonString != null) {
                     try {
                         Json.decodeFromString<Set<MacPrefix>>(jsonString).toMutableSet()
@@ -76,14 +89,14 @@ class MacPrefixRepository(private val context: Context) {
                 }
 
                 currentPrefixes.add(newPrefix)
-                preferences[PreferencesKeys.MAC_PREFIXES] = Json.encodeToString(currentPrefixes)
+                preferences[stringPreferencesKey("mac_prefixes_json")] = Json.encodeToString(currentPrefixes)
             }
         }
     }
 
     suspend fun removeMacPrefix(macPrefix: MacPrefix) {
         context.dataStore.edit { preferences ->
-            val jsonString = preferences[PreferencesKeys.MAC_PREFIXES]
+            val jsonString = preferences[stringPreferencesKey("mac_prefixes_json")]
             val currentPrefixes = if (jsonString != null) {
                 try {
                     Json.decodeFromString<Set<MacPrefix>>(jsonString).toMutableSet()
@@ -95,18 +108,24 @@ class MacPrefixRepository(private val context: Context) {
             }
 
             currentPrefixes.remove(macPrefix)
-            preferences[PreferencesKeys.MAC_PREFIXES] = Json.encodeToString(currentPrefixes)
+            preferences[stringPreferencesKey("mac_prefixes_json")] = Json.encodeToString(currentPrefixes)
         }
     }
 
-    private fun normalizeMacPrefix(prefix: String): String {
-        // Remove colons and convert to uppercase
-        return prefix.replace(":", "").uppercase()
+    private fun normalizePrefix(prefix: String, isManufacturerId: Boolean): String {
+        return if (isManufacturerId) {
+            if (prefix.lowercase().startsWith("0x")) prefix else "0x$prefix"
+        } else {
+            prefix.replace(":", "").uppercase()
+        }
     }
 
-    private fun isValidMacPrefix(prefix: String): Boolean {
-        // Check if prefix contains only valid hex characters and is between 2-12 characters
-        return prefix.matches(Regex("[0-9A-F]{2,12}"))
+    private fun isValidPrefix(prefix: String, isManufacturerId: Boolean): Boolean {
+        return if (isManufacturerId) {
+            val clean = prefix.lowercase().removePrefix("0x")
+            clean.isNotEmpty() && clean.matches(Regex("[0-9a-f]{1,4}"))
+        } else {
+            prefix.matches(Regex("[0-9A-F]{2,12}"))
+        }
     }
-
 }

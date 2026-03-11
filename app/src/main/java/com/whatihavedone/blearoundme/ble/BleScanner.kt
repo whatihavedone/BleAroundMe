@@ -9,8 +9,10 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Log
+import android.util.SparseArray
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
+import com.whatihavedone.blearoundme.data.MacPrefix
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -18,7 +20,8 @@ data class BleScanResult(
     val deviceName: String?,
     val macAddress: String,
     val rssi: Int,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val matchingTag: String? = null
 )
 
 class BleScanner(private val context: Context) {
@@ -36,7 +39,7 @@ class BleScanner(private val context: Context) {
     private val _foundMatchingDevices = MutableStateFlow<List<BleScanResult>>(emptyList())
     val foundMatchingDevices: StateFlow<List<BleScanResult>> = _foundMatchingDevices
 
-    private var macPrefixes = setOf<String>()
+    private var filterCriteria = setOf<MacPrefix>()
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
@@ -55,12 +58,14 @@ class BleScanner(private val context: Context) {
                 val deviceName = device.name
                 val rssi = scanResult.rssi
 
-                Log.d("BleScanner", "Found device: $deviceName ($macAddress) RSSI: $rssi")
-
+                // Find matching criteria and its tag
+                val matchingCriteria = findMatchingCriteria(scanResult)
+                
                 val bleResult = BleScanResult(
                     deviceName = deviceName,
                     macAddress = macAddress,
-                    rssi = rssi
+                    rssi = rssi,
+                    matchingTag = matchingCriteria?.tag
                 )
 
                 // Update scan results
@@ -73,9 +78,9 @@ class BleScanner(private val context: Context) {
                 }
                 _scanResults.value = currentResults
 
-                // Check if device matches any of the MAC prefixes
-                if (matchesMacPrefix(macAddress)) {
-                    Log.i("BleScanner", "Found matching device: $deviceName ($macAddress)")
+                // If a match was found, update matching devices
+                if (matchingCriteria != null) {
+                    Log.i("BleScanner", "Found matching device: $deviceName ($macAddress) Tag: ${matchingCriteria.tag}")
                     val currentMatchingDevices = _foundMatchingDevices.value.toMutableList()
                     val existingMatchIndex = currentMatchingDevices.indexOfFirst { it.macAddress == macAddress }
                     if (existingMatchIndex != -1) {
@@ -94,34 +99,56 @@ class BleScanner(private val context: Context) {
         }
     }
 
-    fun setMacPrefixes(prefixes: Set<String>) {
-        macPrefixes = prefixes.map { it.uppercase().replace(":", "") }.toSet()
-        Log.d("BleScanner", "Updated MAC prefixes: $macPrefixes")
+    fun setFilterCriteria(criteria: Set<MacPrefix>) {
+        this.filterCriteria = criteria
+        Log.d("BleScanner", "Updated filter criteria: ${criteria.size} items")
     }
 
-    private fun matchesMacPrefix(macAddress: String): Boolean {
-        val cleanMac = macAddress.replace(":", "").uppercase()
-        return macPrefixes.any { prefix ->
-            cleanMac.startsWith(prefix)
+    private fun findMatchingCriteria(scanResult: ScanResult): MacPrefix? {
+        val macAddress = scanResult.device.address.replace(":", "").uppercase()
+        
+        // 1. Check MAC Prefixes
+        val macMatch = filterCriteria.firstOrNull { criteria ->
+            !criteria.isManufacturerId && macAddress.startsWith(criteria.address.uppercase().replace(":", ""))
         }
+        if (macMatch != null) return macMatch
+
+        // 2. Check Manufacturer IDs
+        val scanRecord = scanResult.scanRecord ?: return null
+        val manufacturerData = scanRecord.manufacturerSpecificData
+        
+        for (i in 0 until manufacturerData.size()) {
+            val id = manufacturerData.keyAt(i)
+            val idMatch = filterCriteria.firstOrNull { criteria ->
+                criteria.isManufacturerId && try {
+                    val targetId = criteria.address.lowercase().removePrefix("0x").toInt(16)
+                    targetId == id
+                } catch (e: Exception) {
+                    false
+                }
+            }
+            if (idMatch != null) return idMatch
+        }
+        
+        return null
     }
 
     fun startScan(): Boolean {
         Log.d("BleScanner", "startScan() called")
 
-        if (!bluetoothAdapter.isEnabled) {
-            Log.w("BleScanner", "Bluetooth is not enabled")
+        if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) {
+            Log.w("BleScanner", "Bluetooth is not enabled or supported")
             Toast.makeText(context, "Please enable Bluetooth to scan for devices", Toast.LENGTH_LONG).show()
             return false
         }
 
         if (_isScanning.value) {
             Log.w("BleScanner", "Scan is already running")
-            return true // Return true since we're already scanning
+            return true
         }
 
         if (!hasRequiredPermissions()) {
-            Log.w("BleScanner", "Missing required permissions: ${getMissingPermissions()}")
+            Log.w("BleScanner", "Missing required permissions")
             return false
         }
 
@@ -161,6 +188,8 @@ class BleScanner(private val context: Context) {
             Log.i("BleScanner", "BLE scan stopped")
         } catch (e: SecurityException) {
             Log.e("BleScanner", "Security exception stopping scan", e)
+        } catch (e: Exception) {
+            Log.e("BleScanner", "Error stopping scan", e)
         }
     }
 
@@ -173,18 +202,6 @@ class BleScanner(private val context: Context) {
 
         return permissions.all { permission ->
             ActivityCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
-        }
-    }
-
-    private fun getMissingPermissions(): List<String> {
-        val permissions = listOf(
-            Manifest.permission.BLUETOOTH_SCAN,
-            Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        )
-
-        return permissions.filter { permission ->
-            ActivityCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED
         }
     }
 

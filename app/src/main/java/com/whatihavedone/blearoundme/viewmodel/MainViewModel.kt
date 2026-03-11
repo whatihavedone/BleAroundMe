@@ -51,9 +51,9 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    fun addMacPrefix(prefix: String, tag: String = "Custom Device") {
+    fun addMacPrefix(prefix: String, tag: String = "Custom Device", isManufacturerId: Boolean = false) {
         viewModelScope.launch {
-            macPrefixRepository?.addMacPrefix(prefix, tag)
+            macPrefixRepository?.addMacPrefix(prefix, tag, isManufacturerId)
         }
     }
 

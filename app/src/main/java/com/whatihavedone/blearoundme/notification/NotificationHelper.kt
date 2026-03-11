@@ -24,8 +24,6 @@ class NotificationHelper(private val context: Context) {
 
     private val notificationManager = NotificationManagerCompat.from(context)
 
-    private val macPrefixRepository = MacPrefixRepository(context)
-
     init {
         createNotificationChannels()
     }
@@ -71,14 +69,7 @@ class NotificationHelper(private val context: Context) {
         val text = "$deviceName found nearby (${device.macAddress})"
         val bigText = """
             Device: $deviceName
-            Tag: ${
-            macPrefixRepository.macPrefixes.first()
-                .firstOrNull {
-                    it.address.contains(device.macAddress.split(":").let {
-                        "${it[0]}${it[1]}${it[2]}"
-                    }, ignoreCase = true)
-                }?.tag
-        }
+            Tag: ${device.matchingTag ?: "Matched Device"}
             MAC: ${device.macAddress}
             Signal Strength: ${device.rssi} dBm
             Time: ${formatTimestamp(device.timestamp)}

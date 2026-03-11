@@ -222,9 +222,8 @@ class BleScanService : LifecycleService() {
     private fun observeMacPrefixes() {
         lifecycleScope.launch {
             macPrefixRepository.macPrefixes.collect { prefixes ->
-                val addressSet = prefixes.map { it.address }.toSet()
-                bleScanner.setMacPrefixes(addressSet)
-                Log.d("BleScanService", "Updated scanner with ${prefixes.size} MAC prefixes")
+                bleScanner.setFilterCriteria(prefixes)
+                Log.d("BleScanService", "Updated scanner with ${prefixes.size} filter criteria")
             }
         }
     }
