@@ -1,6 +1,6 @@
 # Smart Devices Detector
 
-An Android app built with Jetpack Compose and Kotlin that scans for BLE devices matching specific MAC address prefixes and displays notifications when target devices are detected.
+An Android app built with Jetpack Compose and Kotlin that scans for BLE devices matching specific MAC address prefixes or Manufacturer IDs and displays notifications when target devices are detected.
 
 | Main screen         | Scanning                | Permission request        |
 |---------------------|-------------------------|---------------------------|
@@ -10,7 +10,9 @@ An Android app built with Jetpack Compose and Kotlin that scans for BLE devices 
 ## Features
 
 - **BLE Scanning**: Continuously scans for nearby Bluetooth Low Energy devices
-- **MAC Prefix Filtering**: Configure specific MAC address prefixes to detect target devices (e.g., smart glasses)
+- **Detection Criteria**: 
+  - **MAC Prefix Filtering**: Configure specific MAC address prefixes (e.g., `24:F0:94`)
+  - **Manufacturer ID Filtering**: Detect devices using specific Manufacturer IDs (e.g., `0x01AB`)
 - **Background Operation**: Runs as a foreground service to scan even when the app is in the background
 - **Notification System**: Shows notifications when matching devices are found
 - **Permission Management**: Handles all necessary BLE and location permissions automatically
@@ -34,30 +36,30 @@ The app requires the following permissions:
 
 1. **Install and Launch**: Install the app and launch it
 2. **Grant Permissions**: The app will request all necessary permissions on first launch
-3. **Configure MAC Prefixes**: Add MAC address prefixes for the devices you want to detect
-   - Example: "24:F0:94" or "24F094" for specific smart glasses models
-   - You can add multiple prefixes to detect different device types
+3. **Configure Detection Criteria**: 
+   - Tap the **+** button on the main screen.
+   - **MAC Prefix**: Toggle to MAC mode and enter the first few bytes (e.g., "24:F0:94").
+   - **Manufacturer ID**: Toggle to Manufacturer ID mode and enter the 2-byte hex ID (e.g., "0x01AB").
+   - You can add multiple criteria to detect different device types.
 4. **Start Scanning**: Tap the "Start Scanning" button to begin background BLE scanning
 5. **Receive Notifications**: When a matching device is detected, you'll receive a notification
 
-## MAC Address Prefixes
+## Detection Criteria Explained
 
-MAC address prefixes are the first few characters of a device's MAC address that identify the manufacturer or device type. Common examples:
+### MAC Address Prefixes
+The first few characters of a device's MAC address identify the manufacturer. This is useful for detecting devices from a specific brand (like Meta Quest or Ray-Ban glasses).
 
-- Smart glasses manufacturers often use specific prefixes
-- You can find MAC prefixes by:
-  - Checking device documentation
-  - Using BLE scanner apps to identify target devices
-  - Looking up OUI (Organizationally Unique Identifier) databases
+### Manufacturer IDs
+Manufacturer IDs are 16-bit identifiers assigned by the Bluetooth SIG. Many "smart" devices broadcast this ID in their advertisement data. This app allows you to target specific hardware IDs like `0x01AB`, `0x058E`, or `0x0D53`.
 
 ## Architecture
 
 The app consists of:
 - **MainActivity**: Main UI entry point with Jetpack Compose
-- **BleScanner**: Core BLE scanning logic with prefix matching
+- **BleScanner**: Core BLE scanning logic with prefix and Manufacturer ID matching
 - **BleScanService**: Foreground service for background scanning
 - **NotificationHelper**: Manages device found notifications
-- **MacPrefixRepository**: Persistent storage for MAC prefixes using DataStore
+- **MacPrefixRepository**: Persistent storage for detection criteria using DataStore
 - **PermissionManager**: Handles runtime permission requests
 
 ## Technical Details
